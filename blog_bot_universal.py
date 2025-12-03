@@ -11,96 +11,80 @@ if "blog_content" not in st.session_state:
 if "seo_data" not in st.session_state:
     st.session_state.seo_data = ""
 
-# --- 🎨 MODERN STYLING (The "Stripe" Look) ---
-# We treat the blog post like a "Card" floating on the page
-BLOG_WRAPPER_START = """
-<div style="
-    max-width: 720px;
-    margin: 0 auto;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
-    color: #334155; 
-    font-size: 19px; 
-    line-height: 1.8; 
-    background-color: #ffffff; 
-    padding: 40px; 
-    border-radius: 12px; 
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-">
-"""
-BLOG_WRAPPER_END = "</div>"
-
-TAKEAWAY_BOX = """
-<div style="
-    background-color: #f8fafc; 
-    border-left: 5px solid #2563eb; 
-    padding: 24px; 
-    border-radius: 6px; 
-    margin-bottom: 40px;
-    margin-top: 10px;
-">
-"""
-
-# --- HELPER: AGGRESSIVE CLEANER ---
-def clean_and_wrap_html(text):
-    """
-    1. Removes Markdown backticks (The cause of your issue).
-    2. Wraps in the Modern CSS container.
-    """
-    # Strip the "Poison" characters
-    text = text.replace("```html", "")
-    text = text.replace("```", "")
-    text = text.strip()
-    
-    # Remove duplicates if AI added them
-    text = text.replace(BLOG_WRAPPER_START.strip(), "")
-    text = text.replace(BLOG_WRAPPER_END.strip(), "")
-    
-    # Return wrapped
-    return f"{BLOG_WRAPPER_START}\n{text}\n{BLOG_WRAPPER_END}"
+# --- HELPER: CLEANER ---
+def clean_html_output(text):
+    text = text.replace("```html", "").replace("```", "").strip()
+    return text
 
 # --- AI WRITER ---
 def generate_blog_post(topic, persona, key_points, tone):
+    
+    # 1. Define the Styles to be injected EVERYWHERE
+    # We apply these to every single tag so GHL can't revert to Times New Roman
+    
+    FONT_STYLE = "font-family: 'Inter', Helvetica, Arial, sans-serif; color: #334155; line-height: 1.8; font-size: 18px;"
+    HEADER_STYLE = "font-family: 'Inter', Helvetica, Arial, sans-serif; color: #0f172a; font-weight: 700; margin-top: 40px; margin-bottom: 20px;"
+    H2_STYLE = f"{HEADER_STYLE} font-size: 28px;"
+    H3_STYLE = f"{HEADER_STYLE} font-size: 22px;"
+    
+    # The Takeaways box needs to be robust
+    BOX_STYLE = "background-color: #f1f5f9; border-left: 5px solid #2563eb; padding: 25px; margin-bottom: 40px; border-radius: 8px;"
+    
     prompt = f"""
     IDENTITY: {persona}
     TONE: {tone}
     TOPIC: "{topic}"
     DETAILS: {key_points}
     
-    TASK: Write the inner HTML content.
+    TASK: Write the blog post HTML.
     
-    FORMATTING RULES:
-    1. Start with Key Takeaways: {TAKEAWAY_BOX}
-    2. Inside box: <h3 style="margin-top: 0; color: #0f172a;">Key Takeaways</h3> and <ul style="color: #334155; margin-bottom: 0; padding-left: 20px;">.
-    3. HEADERS: Use <h2 style="color: #0f172a; font-weight: 700; font-size: 28px; margin-top: 50px; margin-bottom: 20px; letter-spacing: -0.02em;">.
-    4. PARAGRAPHS: Use <p style="margin-bottom: 24px;">.
-    5. EMPHASIS: Use <strong style="color: #0f172a; font-weight: 600;">.
-    6. LINKS: Use <a href="#" style="color: #2563eb; text-decoration: underline; font-weight: 500;">.
-    7. NO <html> tags. NO Markdown backticks.
+    CRITICAL FORMATTING RULES (Apply these styles inline to every tag):
+    
+    1. Start with the Key Takeaways Box:
+       <div style="{BOX_STYLE}">
+          <h3 style="{H3_STYLE} margin-top: 0;">Key Takeaways</h3>
+          <ul style="{FONT_STYLE} margin-bottom: 0; padding-left: 20px;">
+             <li>...</li>
+          </ul>
+       </div>
+
+    2. For every Main Header (H2), use EXACTLY: <h2 style="{H2_STYLE}">
+    
+    3. For every Paragraph (P), use EXACTLY: <p style="{FONT_STYLE} margin-bottom: 24px;">
+    
+    4. For Lists (UL/OL), use EXACTLY: <ul style="{FONT_STYLE} margin-bottom: 24px; padding-left: 20px;">
+    
+    5. For Bold Text, use: <strong style="color: #0f172a;">
+    
+    6. For Links, use: <a href="#" style="color: #2563eb; text-decoration: underline;">
+    
+    7. NO <html> or <body> tags. Output only the inner content.
     """
     try:
         response = client.chat.completions.create(
             model="gpt-4o", 
             messages=[{"role": "user", "content": prompt}]
         )
-        return clean_and_wrap_html(response.choices[0].message.content)
+        return clean_html_output(response.choices[0].message.content)
+        
     except Exception as e: return f"Error: {e}"
 
 def refine_blog_post(current_html, instructions):
-    # Unwrap for editing
-    core_text = current_html.replace(BLOG_WRAPPER_START, "").replace(BLOG_WRAPPER_END, "")
-    
     prompt = f"""
-    Expert Editor Task: Edit this HTML based on instructions.
+    Expert Editor Task: Edit this HTML.
     INSTRUCTIONS: "{instructions}"
-    HTML CONTENT: {core_text}
-    RULES: Keep CSS styles. Output ONLY HTML. No markdown.
+    HTML CONTENT: {current_html}
+    
+    RULES: 
+    1. Keep ALL the inline style="..." attributes exactly as they are. Do not strip them.
+    2. Output ONLY HTML.
     """
     try:
         response = client.chat.completions.create(
             model="gpt-4o", 
             messages=[{"role": "user", "content": prompt}]
         )
-        return clean_and_wrap_html(response.choices[0].message.content)
+        return clean_html_output(response.choices[0].message.content)
     except Exception as e: return current_html
 
 def generate_seo_meta(content):
@@ -113,14 +97,17 @@ def generate_seo_meta(content):
     except: return ""
 
 # --- UI ---
-st.set_page_config(page_title="Modern Auto-Blogger", page_icon="✍️", layout="wide")
-st.title("✍️ Universal Auto-Blogger (Clean Code Fix)")
+st.set_page_config(page_title="Universal Auto-Blogger", page_icon="✍️", layout="wide")
+st.title("✍️ Universal Auto-Blogger (Inline Style Fix)")
 
 with st.sidebar:
     st.header("1. Settings")
     persona = st.text_area("Persona", height=100, 
         value="Lead Revenue Architect at Sharp Human. Expert in AI and RevOps.")
-    tone = st.select_slider("Tone", options=["Corporate", "Direct", "Educational", "Storyteller"], value="Educational")
+    tone = st.select_slider("Tone", 
+        options=["Corporate", "Direct", "Educational", "Storyteller", "Witty"], 
+        value="Educational")
+        
     if st.button("Start Over"):
         st.session_state.blog_content = ""
         st.rerun()
@@ -153,11 +140,9 @@ else:
 
     with col2:
         st.subheader("📖 Preview")
-        # Renders the HTML visually
         st.markdown(st.session_state.blog_content, unsafe_allow_html=True)
         
         st.divider()
-        st.subheader("📋 Clean HTML Code")
-        st.info("Click the Copy icon. Then paste into GHL < > Editor.")
-        # This box now GUARANTEES no backticks
+        st.subheader("📋 HTML Code")
+        st.info("Copy this EXACTLY into the GHL Code Editor (< > button).")
         st.code(st.session_state.blog_content, language="html")
