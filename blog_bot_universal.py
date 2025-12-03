@@ -11,66 +11,63 @@ if "blog_content" not in st.session_state:
 if "seo_data" not in st.session_state:
     st.session_state.seo_data = ""
 
-# --- 🎨 THE "ULTRA-MODERN" STYLING ENGINE ---
-# This CSS mimics top-tier tech blogs (Linear, Stripe, a16z)
-# It uses inline styles because GHL strips <style> tags sometimes.
+# --- 🎨 THE "MODERN SAAS" STYLING ENGINE ---
+# This CSS forces the blog to look like a high-end tech site (Stripe/Notion style).
+# We use !important to override GoHighLevel defaults.
 
-# 1. Main Container (The Paper)
-WRAPPER_START = """
+BLOG_WRAPPER_START = """
 <div style="
-    max-width: 740px;
+    max-width: 720px;
     margin: 0 auto;
-    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
     color: #334155; /* Slate 700 */
-    line-height: 1.8;
     font-size: 19px;
+    line-height: 1.8;
     background-color: #ffffff;
     padding: 40px;
-    border-radius: 16px;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
 ">
 """
-WRAPPER_END = "</div>"
+BLOG_WRAPPER_END = "</div>"
 
-# 2. Key Takeaways Card (Modern Gradient Border)
+# The "Notion Style" Callout Box
 TAKEAWAY_BOX = """
 <div style="
-    background: #f8fafc;
-    border-left: 6px solid #2563eb;
-    border-radius: 8px;
-    padding: 32px;
-    margin-bottom: 48px;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+    background-color: #f8fafc; 
+    border-left: 5px solid #2563eb; 
+    padding: 24px; 
+    border-radius: 6px; 
+    margin-bottom: 40px;
+    margin-top: 10px;
 ">
 """
 
 # --- HELPER: CLEANER ---
 def clean_and_wrap_html(text):
-    # Remove Markdown
     text = text.replace("```html", "").replace("```", "").strip()
-    # Remove duplicates if AI added them
-    text = text.replace(WRAPPER_START.strip(), "").replace(WRAPPER_END.strip(), "")
-    return f"{WRAPPER_START}\n{text}\n{WRAPPER_END}"
+    text = text.replace(BLOG_WRAPPER_START.strip(), "").replace(BLOG_WRAPPER_END.strip(), "")
+    return f"{BLOG_WRAPPER_START}\n{text}\n{BLOG_WRAPPER_END}"
 
 # --- AI WRITER ---
 def generate_blog_post(topic, persona, key_points, tone):
     
     prompt = f"""
     IDENTITY: {persona}
-    TONE: {tone} (Sophisticated, authoritative, human. Use varied sentence structure.)
+    TONE: {tone} (Write like a modern tech thought leader. Crisp, authoritative, human.)
     TOPIC: "{topic}"
     DETAILS: {key_points}
     
-    TASK: Write the inner HTML content.
+    TASK: Write the HTML content.
     
-    STYLING RULES (Strictly enforce these):
+    STYLING RULES (Strictly enforce these inline styles):
     1. Start with the Key Takeaways box using EXACTLY this string: {TAKEAWAY_BOX}
-    2. Inside that box, use <h3 style="margin-top: 0; color: #0f172a; letter-spacing: -0.02em;">Key Takeaways</h3> and <ul style="color: #334155; margin-bottom: 0;">.
-    3. HEADERS: Use <h2 style="color: #0f172a; font-weight: 700; margin-top: 56px; margin-bottom: 24px; letter-spacing: -0.03em; font-size: 30px;"> for main sections.
-    4. PARAGRAPHS: Use <p style="margin-bottom: 28px;">.
+    2. Inside that box, use <h3 style="margin-top: 0; color: #0f172a; font-weight: 700; font-size: 20px;">Key Takeaways</h3> and <ul style="color: #334155; margin-bottom: 0; padding-left: 20px;">.
+    3. HEADERS: Use <h2 style="color: #0f172a; font-weight: 700; font-size: 28px; margin-top: 50px; margin-bottom: 20px; letter-spacing: -0.02em;"> for main sections.
+    4. PARAGRAPHS: Use <p style="margin-bottom: 24px;">.
     5. EMPHASIS: Use <strong style="color: #0f172a; font-weight: 600;"> for bold text.
-    6. LINKS: Use <a href="#" style="color: #2563eb; text-decoration: underline; text-underline-offset: 4px; font-weight: 500;"> for links.
-    7. No <html>/<body> tags.
+    6. LINKS: Use <a href="#" style="color: #2563eb; text-decoration: underline; text-decoration-thickness: 2px; font-weight: 500;"> for links.
+    7. NO <html>/<body> tags.
     """
     try:
         response = client.chat.completions.create(
@@ -82,7 +79,7 @@ def generate_blog_post(topic, persona, key_points, tone):
     except Exception as e: return f"Error: {e}"
 
 def refine_blog_post(current_html, instructions):
-    core_text = current_html.replace(WRAPPER_START, "").replace(WRAPPER_END, "")
+    core_text = current_html.replace(BLOG_WRAPPER_START, "").replace(BLOG_WRAPPER_END, "")
     
     prompt = f"""
     Expert Editor Task: Edit this HTML.
