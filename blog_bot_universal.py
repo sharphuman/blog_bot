@@ -11,36 +11,37 @@ if "blog_content" not in st.session_state:
 if "seo_data" not in st.session_state:
     st.session_state.seo_data = ""
 
-# --- STYLING CONSTANTS (The Safety Net) ---
-# We force this wrapper onto EVERY blog post, no matter what the AI does.
-# This ensures it is always White Background with Dark Text.
+# --- STYLING (Force White Paper Look) ---
 BLOG_WRAPPER_START = """
-<div style="background-color: #ffffff; color: #333333; font-family: Arial, sans-serif; font-size: 16px; line-height: 1.6; padding: 20px; border-radius: 8px;">
+<div style="background-color: #ffffff; color: #000000; font-family: Arial, sans-serif; font-size: 16px; line-height: 1.6; padding: 40px; border-radius: 8px; border: 1px solid #e0e0e0;">
 """
 BLOG_WRAPPER_END = "</div>"
 
-# --- HELPER: CLEANER ---
+# --- HELPER: AGGRESSIVE CLEANER ---
 def clean_and_wrap_html(text):
     """
-    1. Strips markdown backticks.
-    2. Removes any existing wrappers (to prevent duplicates).
-    3. Re-applies the master White Background wrapper.
+    Removes Markdown lines and wraps in the white container.
     """
-    # Strip Markdown
-    text = text.replace("```html", "").replace("```", "").strip()
+    # 1. Strip Markdown lines
+    lines = text.split('\n')
+    clean_lines = []
+    for line in lines:
+        if "```" in line: continue # Skip lines with backticks
+        clean_lines.append(line)
     
-    # Strip previous wrappers if they exist (cleanup)
+    text = "\n".join(clean_lines).strip()
+    
+    # 2. Strip previous wrappers to avoid duplication
     text = text.replace(BLOG_WRAPPER_START.strip(), "")
     text = text.replace(BLOG_WRAPPER_END.strip(), "")
     
-    # Return wrapped content
+    # 3. Return wrapped
     return f"{BLOG_WRAPPER_START}\n{text}\n{BLOG_WRAPPER_END}"
 
 # --- AI WRITER ---
 def generate_blog_post(topic, persona, key_points, tone):
-    
-    # Specific style for the Takeaways box to ensure visibility
-    takeaway_box_style = 'background-color: #f0f4f8; border-left: 5px solid #007bff; padding: 15px; margin-bottom: 25px; color: #000000;'
+    # Style for Takeaways Box (Grey BG, Blue Border, Black Text)
+    takeaway_box = 'background-color: #f0f4f8; border-left: 6px solid #007bff; padding: 20px; margin-bottom: 30px; color: #000000 !important;'
     
     prompt = f"""
     IDENTITY: {persona}
@@ -51,47 +52,37 @@ def generate_blog_post(topic, persona, key_points, tone):
     TASK: Write the inner HTML content for a blog post.
     
     FORMATTING RULES:
-    1. Start immediately with a Key Takeaways box using this div: <div style="{takeaway_box_style}">
-    2. Inside that box, use <h3>Key Takeaways</h3> and <ul>. Ensure text is Black.
-    3. After the box, use <h2> for main headers.
+    1. Start immediately with a Key Takeaways box: <div style="{takeaway_box}">
+    2. Inside the box, use <h3>Key Takeaways</h3> and <ul>. Ensure text is Black.
+    3. Use <h2> for main headers.
     4. Use <p> for paragraphs.
-    5. DO NOT use <html>, <head>, <body>, or main wrapper divs.
-    6. NO markdown backticks.
+    5. Do NOT use <html>, <head>, or <body> tags.
     """
     try:
         response = client.chat.completions.create(
             model="gpt-4o", 
             messages=[{"role": "user", "content": prompt}]
         )
-        # We wrap it in Python to guarantee the style sticks
         return clean_and_wrap_html(response.choices[0].message.content)
         
     except Exception as e: return f"Error: {e}"
 
 def refine_blog_post(current_html, instructions):
-    # Strip wrapper before sending to AI (so it only edits text)
+    # Strip wrapper for editing
     core_text = current_html.replace(BLOG_WRAPPER_START, "").replace(BLOG_WRAPPER_END, "")
     
     prompt = f"""
-    You are an Expert Editor. Edit this HTML content based on instructions.
-    
+    You are an Expert Editor. Edit this HTML based on instructions.
     USER INSTRUCTIONS: "{instructions}"
-    CURRENT HTML CONTENT:
-    {core_text}
-    
-    RULES: 
-    1. Output ONLY valid HTML. 
-    2. Keep the formatting tags (h2, ul, div style=...). 
-    3. Do NOT add markdown backticks.
+    CURRENT HTML: {core_text}
+    RULES: Output ONLY valid HTML. Keep formatting tags.
     """
     try:
         response = client.chat.completions.create(
             model="gpt-4o", 
             messages=[{"role": "user", "content": prompt}]
         )
-        # Re-wrap the result
         return clean_and_wrap_html(response.choices[0].message.content)
-        
     except Exception as e: return current_html
 
 def generate_seo_meta(content):
@@ -105,60 +96,49 @@ def generate_seo_meta(content):
 
 # --- UI ---
 st.set_page_config(page_title="Universal Auto-Blogger", page_icon="✍️", layout="wide")
-st.title("✍️ Universal Auto-Blogger (Safe Mode)")
+st.title("✍️ Universal Auto-Blogger (Final Fix)")
 
-# SIDEBAR
 with st.sidebar:
-    st.header("1. Draft Settings")
+    st.header("1. Settings")
     persona = st.text_area("Persona", height=100, 
-        value="Lead Revenue Architect at Sharp Human. Expert in AI, Deliverability, and RevOps.")
-    tone = st.select_slider("Tone", options=["Corporate", "Direct", "Educational", "Witty"], value="Direct")
-    
-    st.divider()
-    if st.button("Clear / Start Over", type="secondary"):
+        value="Lead Revenue Architect at Sharp Human. Expert in AI and RevOps.")
+    tone = st.select_slider("Tone", options=["Corporate", "Direct", "Educational"], value="Direct")
+    if st.button("Start Over"):
         st.session_state.blog_content = ""
         st.rerun()
 
-# GENERATION FORM
 if not st.session_state.blog_content:
     with st.form("blog_form"):
-        st.subheader("Create New Post")
-        topic = st.text_area("Topic", height=68, placeholder="e.g. A2P 10DLC Compliance")
-        key_points = st.text_area("Key Points", height=100, placeholder="- Mention Sharp Human Audit")
-        submitted = st.form_submit_button("Generate First Draft")
+        topic = st.text_area("Topic", "e.g. A2P 10DLC Compliance")
+        key_points = st.text_area("Key Points", "- Mention Sharp Human Audit")
+        submitted = st.form_submit_button("Generate")
 
     if submitted and topic:
-        with st.spinner("Drafting article..."):
+        with st.spinner("Writing..."):
             content = generate_blog_post(topic, persona, key_points, tone)
             st.session_state.blog_content = content
             st.session_state.seo_data = generate_seo_meta(content)
             st.rerun()
 
-# EDITOR & PREVIEW
 else:
     col1, col2 = st.columns([1, 1])
     
     with col1:
-        st.subheader("💬 AI Editor")
-        user_feedback = st.chat_input("Ex: 'Make the title punchier'")
+        st.subheader("💬 Editor")
+        user_feedback = st.chat_input("Make edits here...")
         if user_feedback:
-            with st.spinner("Applying edits..."):
-                new_ver = refine_blog_post(st.session_state.blog_content, user_feedback)
-                st.session_state.blog_content = new_ver
+            with st.spinner("Editing..."):
+                st.session_state.blog_content = refine_blog_post(st.session_state.blog_content, user_feedback)
                 st.rerun()
-        
-        st.divider()
-        st.markdown("### 🔍 SEO Data")
-        st.code(st.session_state.seo_data, language="text")
+        st.markdown("### SEO Data")
+        st.code(st.session_state.seo_data)
 
     with col2:
-        st.subheader("📖 Live Preview")
-        # This preview will now show the white box correctly
+        st.subheader("📖 Preview")
+        # Renders the HTML to verify it looks correct (White box, black text)
         st.markdown(st.session_state.blog_content, unsafe_allow_html=True)
         
         st.divider()
-        st.subheader("📋 Final Code")
-        st.info("Click the copy button in the top-right of the box below.")
-        
-        # Using st.code provides a built-in one-click COPY button
+        st.subheader("📋 HTML Code")
+        st.info("Copy this EXACTLY into the GHL Code Editor (< > button).")
         st.code(st.session_state.blog_content, language="html")
