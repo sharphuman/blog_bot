@@ -13,48 +13,74 @@ if "seo_data" not in st.session_state:
 
 # --- HELPER: CLEANER ---
 def clean_html_output(text):
-    """Removes Markdown backticks so GHL accepts the code."""
-    text = text.replace("```html", "") # Remove start tag
-    text = text.replace("```", "")     # Remove end tag
-    return text.strip()                # Remove extra whitespace
+    text = text.replace("```html", "").replace("```", "").strip()
+    return text
 
-# --- AI FUNCTIONS ---
+# --- AI WRITER ---
 def generate_blog_post(topic, persona, key_points, tone):
+    
+    # MASTER STYLE WRAPPER
+    # This forces the whole blog to have a White Background and Dark Text
+    # No more invisible text issues!
+    wrapper_start = """
+    <div style="background-color: #ffffff; color: #333333; font-family: sans-serif; padding: 20px; border-radius: 8px; line-height: 1.6;">
+    """
+    wrapper_end = "</div>"
+    
+    # Key Takeaways Box Style (Clean Grey)
+    box_style = 'border: 1px solid #e0e0e0; background-color: #f9f9f9; padding: 20px; border-radius: 5px; margin-bottom: 30px;'
+    
     prompt = f"""
     IDENTITY: {persona}
     TONE: {tone}
     TOPIC: "{topic}"
     DETAILS: {key_points}
     
-    TASK: Write a high-value blog post (HTML format).
-    RULES: 
-    1. Use <h2>, <ul>, <strong>, <p>. 
-    2. NO <html>, <head>, or <body> tags. 
-    3. NO Markdown backticks (```). Just raw HTML.
-    4. Start with <h1> Title. 
-    5. Include a 'Key Takeaways' box.
+    TASK: Write a blog post in HTML.
+    
+    FORMATTING RULES:
+    1. Start with the Key Takeaways box using EXACTLY this div: <div style="{box_style}">
+    2. Inside that box, use an <h3> tag for the title "Key Takeaways".
+    3. Use <h2> for all main section headers.
+    4. Use <strong> for emphasis.
+    5. DO NOT include <html> or <body> tags.
+    6. NO markdown backticks.
     """
     try:
         response = client.chat.completions.create(
             model="gpt-4o", 
             messages=[{"role": "user", "content": prompt}]
         )
-        return clean_html_output(response.choices[0].message.content)
+        # Wrap the AI content in our Safe Color Container
+        raw_html = clean_html_output(response.choices[0].message.content)
+        return f"{wrapper_start}\n{raw_html}\n{wrapper_end}"
+        
     except Exception as e: return f"Error: {e}"
 
 def refine_blog_post(current_content, instructions):
+    # We strip the wrapper before editing, then re-add it later
+    # This prevents the AI from messing up the outer container
+    core_content = current_content.replace('<div style="background-color: #ffffff; color: #333333; font-family: sans-serif; padding: 20px; border-radius: 8px; line-height: 1.6;">', '').replace('</div>', '')
+    
     prompt = f"""
-    You are an Expert Editor. Edit this HTML based on instructions.
+    You are an Expert Editor. Edit this HTML content based on instructions.
     USER INSTRUCTIONS: "{instructions}"
-    CURRENT HTML: {current_content}
-    Output ONLY valid HTML. No markdown.
+    CURRENT HTML: {core_content}
+    
+    RULES: Output ONLY valid HTML. Keep formatting tags (h2, ul). No markdown.
     """
     try:
         response = client.chat.completions.create(
-            model="gpt-4o", 
-            messages=[{"role": "user", "content": prompt}]
+            model="gpt-4o", messages=[{"role": "user", "content": prompt}]
         )
-        return clean_html_output(response.choices[0].message.content)
+        new_core = clean_html_output(response.choices[0].message.content)
+        
+        # Re-wrap in the Safe Color Container
+        wrapper_start = """
+        <div style="background-color: #ffffff; color: #333333; font-family: sans-serif; padding: 20px; border-radius: 8px; line-height: 1.6;">
+        """
+        return f"{wrapper_start}\n{new_core}\n</div>"
+        
     except Exception as e: return current_content
 
 def generate_seo_meta(content):
@@ -68,7 +94,7 @@ def generate_seo_meta(content):
 
 # --- UI ---
 st.set_page_config(page_title="Universal Auto-Blogger", page_icon="✍️", layout="wide")
-st.title("✍️ Universal Auto-Blogger & Editor")
+st.title("✍️ Universal Auto-Blogger")
 
 # SIDEBAR
 with st.sidebar:
@@ -116,9 +142,9 @@ else:
 
     with col2:
         st.subheader("📖 Live Preview")
+        # Render HTML (It will look like a white document now)
         st.markdown(st.session_state.blog_content, unsafe_allow_html=True)
         
         st.divider()
         st.subheader("📋 HTML Code (For GHL)")
-        # This text area now contains CLEAN code without backticks
         st.text_area("Copy this:", value=st.session_state.blog_content, height=300)
