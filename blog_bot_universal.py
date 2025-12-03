@@ -11,56 +11,66 @@ if "blog_content" not in st.session_state:
 if "seo_data" not in st.session_state:
     st.session_state.seo_data = ""
 
-# --- DESIGNER STYLING (The "Human" Look) ---
-BLOG_WRAPPER_START = """
+# --- 🎨 THE "ULTRA-MODERN" STYLING ENGINE ---
+# This CSS mimics top-tier tech blogs (Linear, Stripe, a16z)
+# It uses inline styles because GHL strips <style> tags sometimes.
+
+# 1. Main Container (The Paper)
+WRAPPER_START = """
 <div style="
-    background-color: #ffffff; 
-    color: #374151; 
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
-    font-size: 18px; 
-    line-height: 1.7; 
-    padding: 40px; 
-    border-radius: 12px; 
-    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); 
-    max-width: 800px; 
-    margin: 0 auto;">
+    max-width: 740px;
+    margin: 0 auto;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #334155; /* Slate 700 */
+    line-height: 1.8;
+    font-size: 19px;
+    background-color: #ffffff;
+    padding: 40px;
+    border-radius: 16px;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+">
 """
-BLOG_WRAPPER_END = "</div>"
+WRAPPER_END = "</div>"
+
+# 2. Key Takeaways Card (Modern Gradient Border)
+TAKEAWAY_BOX = """
+<div style="
+    background: #f8fafc;
+    border-left: 6px solid #2563eb;
+    border-radius: 8px;
+    padding: 32px;
+    margin-bottom: 48px;
+    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+">
+"""
 
 # --- HELPER: CLEANER ---
 def clean_and_wrap_html(text):
+    # Remove Markdown
     text = text.replace("```html", "").replace("```", "").strip()
-    text = text.replace(BLOG_WRAPPER_START.strip(), "").replace(BLOG_WRAPPER_END.strip(), "")
-    return f"{BLOG_WRAPPER_START}\n{text}\n{BLOG_WRAPPER_END}"
+    # Remove duplicates if AI added them
+    text = text.replace(WRAPPER_START.strip(), "").replace(WRAPPER_END.strip(), "")
+    return f"{WRAPPER_START}\n{text}\n{WRAPPER_END}"
 
 # --- AI WRITER ---
 def generate_blog_post(topic, persona, key_points, tone):
     
-    # Styled "Key Takeaways" Box (Modern Card Style)
-    takeaway_style = """
-    background-color: #f8fafc; 
-    border-left: 6px solid #2563eb; 
-    padding: 24px; 
-    border-radius: 8px; 
-    margin-bottom: 40px; 
-    color: #1e293b !important;
-    """
-    
     prompt = f"""
     IDENTITY: {persona}
-    TONE: {tone} (Write like a human expert. Use contractions, vary sentence length.)
+    TONE: {tone} (Sophisticated, authoritative, human. Use varied sentence structure.)
     TOPIC: "{topic}"
     DETAILS: {key_points}
     
     TASK: Write the inner HTML content.
     
-    FORMATTING RULES (Strict):
-    1. Start with the Key Takeaways box: <div style="{takeaway_style}">
-    2. Inside box: <h3>Key Takeaways</h3> and <ul>. Text MUST be Dark (#1e293b).
-    3. HEADERS: Use <h2 style="color: #0f172a; margin-top: 40px; font-weight: 700;"> for main sections.
-    4. EMPHASIS: Use <strong style="color: #2563eb;"> for key phrases (adds blue highlights).
-    5. LINKS: If you mention "Contact Us", link to /contact.
-    6. No <html>/<body> tags. No Markdown.
+    STYLING RULES (Strictly enforce these):
+    1. Start with the Key Takeaways box using EXACTLY this string: {TAKEAWAY_BOX}
+    2. Inside that box, use <h3 style="margin-top: 0; color: #0f172a; letter-spacing: -0.02em;">Key Takeaways</h3> and <ul style="color: #334155; margin-bottom: 0;">.
+    3. HEADERS: Use <h2 style="color: #0f172a; font-weight: 700; margin-top: 56px; margin-bottom: 24px; letter-spacing: -0.03em; font-size: 30px;"> for main sections.
+    4. PARAGRAPHS: Use <p style="margin-bottom: 28px;">.
+    5. EMPHASIS: Use <strong style="color: #0f172a; font-weight: 600;"> for bold text.
+    6. LINKS: Use <a href="#" style="color: #2563eb; text-decoration: underline; text-underline-offset: 4px; font-weight: 500;"> for links.
+    7. No <html>/<body> tags.
     """
     try:
         response = client.chat.completions.create(
@@ -72,13 +82,13 @@ def generate_blog_post(topic, persona, key_points, tone):
     except Exception as e: return f"Error: {e}"
 
 def refine_blog_post(current_html, instructions):
-    core_text = current_html.replace(BLOG_WRAPPER_START, "").replace(BLOG_WRAPPER_END, "")
+    core_text = current_html.replace(WRAPPER_START, "").replace(WRAPPER_END, "")
     
     prompt = f"""
-    Expert Editor Task: Edit this HTML based on instructions.
+    Expert Editor Task: Edit this HTML.
     INSTRUCTIONS: "{instructions}"
     HTML CONTENT: {core_text}
-    RULES: Keep the inline CSS styles (color, font, etc). Output ONLY HTML.
+    RULES: Keep the inline CSS styles exactly as they are. Output ONLY HTML.
     """
     try:
         response = client.chat.completions.create(
@@ -99,14 +109,12 @@ def generate_seo_meta(content):
 
 # --- UI ---
 st.set_page_config(page_title="Universal Auto-Blogger", page_icon="✍️", layout="wide")
-st.title("✍️ Universal Auto-Blogger (Designer Edition)")
+st.title("✍️ Universal Auto-Blogger (Modern UI)")
 
 with st.sidebar:
     st.header("1. Settings")
     persona = st.text_area("Persona", height=100, 
         value="Lead Revenue Architect at Sharp Human. Expert in AI and RevOps.")
-    
-    # ADDED "Educational" BACK IN HERE
     tone = st.select_slider("Tone", 
         options=["Corporate", "Direct", "Educational", "Storyteller", "Witty"], 
         value="Educational")
