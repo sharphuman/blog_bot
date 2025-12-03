@@ -5,112 +5,124 @@ from openai import OpenAI
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# --- AI WRITER ---
+# --- SESSION STATE SETUP (The Bot's Memory) ---
+if "blog_content" not in st.session_state:
+    st.session_state.blog_content = ""
+if "seo_data" not in st.session_state:
+    st.session_state.seo_data = ""
+
+# --- AI FUNCTIONS ---
+
 def generate_blog_post(topic, persona, key_points, tone):
     prompt = f"""
-    IDENTITY & PERSONA:
-    {persona}
-    
-    TASK:
-    Write a high-value, authoritative blog post (approx 800-1000 words) about: "{topic}"
-    
+    IDENTITY: {persona}
     TONE: {tone}
+    TOPIC: "{topic}"
+    DETAILS: {key_points}
     
-    CRITICAL DETAILS TO INCLUDE:
-    {key_points}
-    
-    FORMATTING RULES:
-    1. Output strictly in HTML format (use <h2>, <h3>, <p>, <ul>, <li>, <strong>).
-    2. Do NOT use <html>, <head>, or <body> tags. Start directly with the content.
-    3. Include a catchy, SEO-friendly Title in an <h1> tag at the top.
-    4. Start with a "Key Takeaways" box (use a <div style="background-color: #f0f4f8; padding: 20px; border-left: 5px solid #007bff; margin-bottom: 20px;"> container).
-    5. Use short paragraphs, bullet points, and bold text for readability.
-    
-    ENDING:
-    Conclude with a strong Call to Action relevant to the persona described above.
+    TASK: Write a high-value blog post (HTML format).
+    RULES: Use <h2>, <ul>, <strong>. No <html> tags. Start with <h1> Title. Include a 'Key Takeaways' box.
     """
-    
     try:
         response = client.chat.completions.create(
             model="gpt-4o", 
             messages=[{"role": "user", "content": prompt}]
         )
         return response.choices[0].message.content
-    except Exception as e:
-        return f"Error: {e}"
+    except Exception as e: return f"Error: {e}"
 
-def generate_seo_meta(content):
-    """Generates the Meta Description and SEO Keywords"""
+def refine_blog_post(current_content, instructions):
+    """
+    Takes existing HTML and applies user corrections.
+    """
     prompt = f"""
-    Read this blog post HTML and generate:
-    1. A Meta Description (max 160 chars).
-    2. A URL Slug (e.g. topic-name-here).
-    3. 5 SEO Keywords.
+    You are an Expert Editor.
     
-    BLOG CONTENT:
-    {content[:3000]}
+    YOUR TASK:
+    Edit the following HTML blog post based strictly on the user's instructions.
+    Do NOT lose the HTML formatting (<h2>, <ul>, etc).
+    Keep the rest of the article consistent if not asked to change it.
+    
+    USER INSTRUCTIONS: "{instructions}"
+    
+    CURRENT HTML CONTENT:
+    {current_content}
     """
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini", 
+            model="gpt-4o", 
             messages=[{"role": "user", "content": prompt}]
+        )
+        return response.choices[0].message.content
+    except Exception as e: return current_content
+
+def generate_seo_meta(content):
+    prompt = f"Generate Meta Description (160 chars), Slug, and 5 Keywords for this HTML:\n{content[:3000]}"
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini", messages=[{"role": "user", "content": prompt}]
         )
         return response.choices[0].message.content
     except: return ""
 
 # --- UI ---
 st.set_page_config(page_title="Universal Auto-Blogger", page_icon="✍️", layout="wide")
+st.title("✍️ Universal Auto-Blogger & Editor")
 
-st.title("✍️ Universal Auto-Blogger")
-st.markdown("Define the writer, set the topic, and generate HTML for GoHighLevel.")
-
-with st.form("blog_form"):
+# --- SECTION 1: GENERATION FORM ---
+with st.sidebar:
+    st.header("1. Draft Settings")
+    persona = st.text_area("Persona", height=100, 
+        value="Lead Revenue Architect at Sharp Human. Expert in AI, Deliverability, and RevOps.")
+    tone = st.select_slider("Tone", options=["Corporate", "Direct", "Educational", "Witty"], value="Direct")
     
-    # Left Column: The "Who" and "How"
-    c1, c2 = st.columns([1, 1])
+    st.divider()
+    if st.button("Clear / Start Over", type="secondary"):
+        st.session_state.blog_content = ""
+        st.rerun()
+
+# Main Input Area (Only show if empty)
+if not st.session_state.blog_content:
+    with st.form("blog_form"):
+        st.subheader("Create New Post")
+        topic = st.text_area("Topic", height=68, placeholder="e.g. A2P 10DLC Compliance Fixes")
+        key_points = st.text_area("Key Points", height=100, placeholder="- Mention Sharp Human Audit\n- Explain the 'Spam Likely' risk")
+        submitted = st.form_submit_button("Generate First Draft")
+
+    if submitted and topic:
+        with st.spinner("Drafting article..."):
+            content = generate_blog_post(topic, persona, key_points, tone)
+            st.session_state.blog_content = content
+            st.session_state.seo_data = generate_seo_meta(content)
+            st.rerun()
+
+# --- SECTION 2: EDITOR & REFINEMENT ---
+else:
+    # Two Columns: Editor on Left, Preview on Right
+    col1, col2 = st.columns([1, 1])
     
-    with c1:
-        persona = st.text_area("1. Who is the Writer?", 
-            height=100,
-            value="You are the Lead Growth Architect at 'Sharp Human'. You are an expert in AI Automation and Revenue Operations. You focus on efficiency, systems, and scaling revenue.",
-            help="Tell the AI who to be. e.g. 'Senior Recruiter', 'Python Developer', 'Sales Coach'.")
+    with col1:
+        st.subheader("💬 AI Editor Chat")
+        st.info("The blog is generated. Use the chat below to tweak it.")
         
-        tone = st.select_slider("2. Tone of Voice", 
-            options=["Professional & Corporate", "Direct & Bold", "Empathetic & Storytelling", "Technical & Educational", "Witty & Fast-Paced"], 
-            value="Direct & Bold")
+        # THE CHAT INTERFACE
+        user_feedback = st.chat_input("Ex: 'Make the title punchier' or 'Fix the A2P definition'")
+        
+        if user_feedback:
+            with st.spinner("Applying edits..."):
+                new_version = refine_blog_post(st.session_state.blog_content, user_feedback)
+                st.session_state.blog_content = new_version
+                st.rerun()
+                
+        st.divider()
+        st.markdown("### 🔍 SEO Data")
+        st.code(st.session_state.seo_data, language="text")
 
-    # Right Column: The "What"
-    with c2:
-        topic = st.text_area("3. Blog Topic / Title", 
-            height=68,
-            placeholder="e.g. Why candidates ignore calls marked as Spam.")
-            
-        key_points = st.text_area("4. Specific Details to Cover (Optional)", 
-            height=100,
-            placeholder="- Mention A2P 10DLC compliance.\n- Tell the story about my client 'John'.\n- Mention that Sharp Human fixes this setup.",
-            help="Bullet points of facts, stories, or products you MUST include.")
+    with col2:
+        st.subheader("📖 Live Preview")
+        # Display the HTML visually
+        st.markdown(st.session_state.blog_content, unsafe_allow_html=True)
         
-    submitted = st.form_submit_button("Generate Article")
-
-if submitted and topic:
-    with st.spinner("Writing your article..."):
-        # 1. Write Content
-        html_content = generate_blog_post(topic, persona, key_points, tone)
-        
-        # 2. Generate SEO Data
-        seo_data = generate_seo_meta(html_content)
-        
-        # --- DISPLAY RESULTS ---
-        st.success("Article Ready!")
-        
-        tab1, tab2, tab3 = st.tabs(["📖 Reading Mode", "COPY HTML (For GHL)", "🔍 SEO Data"])
-        
-        with tab1:
-            st.markdown(html_content, unsafe_allow_html=True)
-            
-        with tab2:
-            st.info("Step 1: Copy this code. Step 2: In GHL Blog, click the `< >` icon. Step 3: Paste.")
-            st.code(html_content, language="html")
-            
-        with tab3:
-            st.write(seo_data)
+        st.divider()
+        st.subheader("📋 HTML Code (For GHL)")
+        st.text_area("Copy this:", value=st.session_state.blog_content, height=300)
