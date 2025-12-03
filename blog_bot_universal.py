@@ -11,52 +11,57 @@ if "blog_content" not in st.session_state:
 if "seo_data" not in st.session_state:
     st.session_state.seo_data = ""
 
-# --- STYLING (Force White Paper Look) ---
+# --- DESIGNER STYLING (The "Human" Look) ---
+# This CSS makes it look like a high-end Medium article or Magazine
 BLOG_WRAPPER_START = """
-<div style="background-color: #ffffff; color: #000000; font-family: Arial, sans-serif; font-size: 16px; line-height: 1.6; padding: 40px; border-radius: 8px; border: 1px solid #e0e0e0;">
+<div style="
+    background-color: #ffffff; 
+    color: #374151; 
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+    font-size: 18px; 
+    line-height: 1.7; 
+    padding: 40px; 
+    border-radius: 12px; 
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); 
+    max-width: 800px; 
+    margin: 0 auto;">
 """
 BLOG_WRAPPER_END = "</div>"
 
-# --- HELPER: AGGRESSIVE CLEANER ---
+# --- HELPER: CLEANER ---
 def clean_and_wrap_html(text):
-    """
-    Removes Markdown lines and wraps in the white container.
-    """
-    # 1. Strip Markdown lines
-    lines = text.split('\n')
-    clean_lines = []
-    for line in lines:
-        if "```" in line: continue # Skip lines with backticks
-        clean_lines.append(line)
-    
-    text = "\n".join(clean_lines).strip()
-    
-    # 2. Strip previous wrappers to avoid duplication
-    text = text.replace(BLOG_WRAPPER_START.strip(), "")
-    text = text.replace(BLOG_WRAPPER_END.strip(), "")
-    
-    # 3. Return wrapped
+    text = text.replace("```html", "").replace("```", "").strip()
+    text = text.replace(BLOG_WRAPPER_START.strip(), "").replace(BLOG_WRAPPER_END.strip(), "")
     return f"{BLOG_WRAPPER_START}\n{text}\n{BLOG_WRAPPER_END}"
 
 # --- AI WRITER ---
 def generate_blog_post(topic, persona, key_points, tone):
-    # Style for Takeaways Box (Grey BG, Blue Border, Black Text)
-    takeaway_box = 'background-color: #f0f4f8; border-left: 6px solid #007bff; padding: 20px; margin-bottom: 30px; color: #000000 !important;'
+    
+    # Styled "Key Takeaways" Box (Modern Card Style)
+    takeaway_style = """
+    background-color: #f8fafc; 
+    border-left: 6px solid #2563eb; 
+    padding: 24px; 
+    border-radius: 8px; 
+    margin-bottom: 40px; 
+    color: #1e293b !important;
+    """
     
     prompt = f"""
     IDENTITY: {persona}
-    TONE: {tone}
+    TONE: {tone} (Write like a human expert, not a robot. Use contractions, vary sentence length.)
     TOPIC: "{topic}"
     DETAILS: {key_points}
     
-    TASK: Write the inner HTML content for a blog post.
+    TASK: Write the inner HTML content.
     
-    FORMATTING RULES:
-    1. Start immediately with a Key Takeaways box: <div style="{takeaway_box}">
-    2. Inside the box, use <h3>Key Takeaways</h3> and <ul>. Ensure text is Black.
-    3. Use <h2> for main headers.
-    4. Use <p> for paragraphs.
-    5. Do NOT use <html>, <head>, or <body> tags.
+    FORMATTING RULES (Strict):
+    1. Start with the Key Takeaways box: <div style="{takeaway_style}">
+    2. Inside box: <h3>Key Takeaways</h3> and <ul>. Text MUST be Dark (#1e293b).
+    3. HEADERS: Use <h2 style="color: #0f172a; margin-top: 40px; font-weight: 700;"> for main sections.
+    4. EMPHASIS: Use <strong style="color: #2563eb;"> for key phrases (adds blue highlights).
+    5. LINKS: If you mention "Contact Us", link to /contact.
+    6. No <html>/<body> tags. No Markdown.
     """
     try:
         response = client.chat.completions.create(
@@ -68,14 +73,13 @@ def generate_blog_post(topic, persona, key_points, tone):
     except Exception as e: return f"Error: {e}"
 
 def refine_blog_post(current_html, instructions):
-    # Strip wrapper for editing
     core_text = current_html.replace(BLOG_WRAPPER_START, "").replace(BLOG_WRAPPER_END, "")
     
     prompt = f"""
-    You are an Expert Editor. Edit this HTML based on instructions.
-    USER INSTRUCTIONS: "{instructions}"
-    CURRENT HTML: {core_text}
-    RULES: Output ONLY valid HTML. Keep formatting tags.
+    Expert Editor Task: Edit this HTML based on instructions.
+    INSTRUCTIONS: "{instructions}"
+    HTML CONTENT: {core_text}
+    RULES: Keep the inline CSS styles (color, font, etc). Output ONLY HTML.
     """
     try:
         response = client.chat.completions.create(
@@ -86,7 +90,7 @@ def refine_blog_post(current_html, instructions):
     except Exception as e: return current_html
 
 def generate_seo_meta(content):
-    prompt = f"Generate Meta Description (160 chars), Slug, and 5 Keywords for this HTML:\n{content[:3000]}"
+    prompt = f"Generate Meta Description (160 chars), Slug, and 5 Keywords for:\n{content[:3000]}"
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini", messages=[{"role": "user", "content": prompt}]
@@ -96,13 +100,13 @@ def generate_seo_meta(content):
 
 # --- UI ---
 st.set_page_config(page_title="Universal Auto-Blogger", page_icon="✍️", layout="wide")
-st.title("✍️ Universal Auto-Blogger (Final Fix)")
+st.title("✍️ Universal Auto-Blogger (Designer Edition)")
 
 with st.sidebar:
     st.header("1. Settings")
     persona = st.text_area("Persona", height=100, 
         value="Lead Revenue Architect at Sharp Human. Expert in AI and RevOps.")
-    tone = st.select_slider("Tone", options=["Corporate", "Direct", "Educational"], value="Direct")
+    tone = st.select_slider("Tone", options=["Corporate", "Direct", "Storyteller", "Witty"], value="Storyteller")
     if st.button("Start Over"):
         st.session_state.blog_content = ""
         st.rerun()
@@ -125,7 +129,7 @@ else:
     
     with col1:
         st.subheader("💬 Editor")
-        user_feedback = st.chat_input("Make edits here...")
+        user_feedback = st.chat_input("Ex: 'Make the intro punchier'")
         if user_feedback:
             with st.spinner("Editing..."):
                 st.session_state.blog_content = refine_blog_post(st.session_state.blog_content, user_feedback)
@@ -135,7 +139,6 @@ else:
 
     with col2:
         st.subheader("📖 Preview")
-        # Renders the HTML to verify it looks correct (White box, black text)
         st.markdown(st.session_state.blog_content, unsafe_allow_html=True)
         
         st.divider()
