@@ -11,80 +11,76 @@ if "blog_content" not in st.session_state:
 if "seo_data" not in st.session_state:
     st.session_state.seo_data = ""
 
+# --- 🎨 MODERN STYLING ---
+BLOG_WRAPPER_START = """
+<div style="
+    max-width: 720px;
+    margin: 0 auto;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
+    color: #334155; 
+    font-size: 19px; 
+    line-height: 1.8; 
+    background-color: #ffffff; 
+    padding: 40px; 
+    border-radius: 12px; 
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+">
+"""
+BLOG_WRAPPER_END = "</div>"
+
+TAKEAWAY_BOX = """
+<div style="
+    background-color: #f8fafc; 
+    border-left: 5px solid #2563eb; 
+    padding: 24px; 
+    border-radius: 6px; 
+    margin-bottom: 40px; 
+    margin-top: 10px;
+    color: #1e293b !important;
+">
+"""
+
 # --- HELPER: CLEANER ---
-def clean_html_output(text):
+def clean_and_wrap_html(text):
     text = text.replace("```html", "").replace("```", "").strip()
-    return text
+    text = text.replace(BLOG_WRAPPER_START.strip(), "")
+    text = text.replace(BLOG_WRAPPER_END.strip(), "")
+    return f"{BLOG_WRAPPER_START}\n{text}\n{BLOG_WRAPPER_END}"
 
 # --- AI WRITER ---
 def generate_blog_post(topic, persona, key_points, tone):
-    
-    # 1. Define the Styles to be injected EVERYWHERE
-    # We apply these to every single tag so GHL can't revert to Times New Roman
-    
-    FONT_STYLE = "font-family: 'Inter', Helvetica, Arial, sans-serif; color: #334155; line-height: 1.8; font-size: 18px;"
-    HEADER_STYLE = "font-family: 'Inter', Helvetica, Arial, sans-serif; color: #0f172a; font-weight: 700; margin-top: 40px; margin-bottom: 20px;"
-    H2_STYLE = f"{HEADER_STYLE} font-size: 28px;"
-    H3_STYLE = f"{HEADER_STYLE} font-size: 22px;"
-    
-    # The Takeaways box needs to be robust
-    BOX_STYLE = "background-color: #f1f5f9; border-left: 5px solid #2563eb; padding: 25px; margin-bottom: 40px; border-radius: 8px;"
-    
     prompt = f"""
     IDENTITY: {persona}
     TONE: {tone}
     TOPIC: "{topic}"
     DETAILS: {key_points}
     
-    TASK: Write the blog post HTML.
+    TASK: Write HTML content.
     
-    CRITICAL FORMATTING RULES (Apply these styles inline to every tag):
-    
-    1. Start with the Key Takeaways Box:
-       <div style="{BOX_STYLE}">
-          <h3 style="{H3_STYLE} margin-top: 0;">Key Takeaways</h3>
-          <ul style="{FONT_STYLE} margin-bottom: 0; padding-left: 20px;">
-             <li>...</li>
-          </ul>
-       </div>
-
-    2. For every Main Header (H2), use EXACTLY: <h2 style="{H2_STYLE}">
-    
-    3. For every Paragraph (P), use EXACTLY: <p style="{FONT_STYLE} margin-bottom: 24px;">
-    
-    4. For Lists (UL/OL), use EXACTLY: <ul style="{FONT_STYLE} margin-bottom: 24px; padding-left: 20px;">
-    
-    5. For Bold Text, use: <strong style="color: #0f172a;">
-    
-    6. For Links, use: <a href="#" style="color: #2563eb; text-decoration: underline;">
-    
-    7. NO <html> or <body> tags. Output only the inner content.
+    FORMATTING:
+    1. Start with Key Takeaways: {TAKEAWAY_BOX}
+    2. Inside box: <h3 style="margin-top: 0; color: #0f172a;">Key Takeaways</h3> and <ul style="color: #334155; margin-bottom: 0; padding-left: 20px;">.
+    3. HEADERS: <h2 style="color: #0f172a; font-weight: 700; font-size: 28px; margin-top: 50px; margin-bottom: 20px;">.
+    4. PARAGRAPHS: <p style="margin-bottom: 24px;">.
+    5. NO <html> tags.
     """
     try:
         response = client.chat.completions.create(
             model="gpt-4o", 
             messages=[{"role": "user", "content": prompt}]
         )
-        return clean_html_output(response.choices[0].message.content)
-        
+        return clean_and_wrap_html(response.choices[0].message.content)
     except Exception as e: return f"Error: {e}"
 
 def refine_blog_post(current_html, instructions):
-    prompt = f"""
-    Expert Editor Task: Edit this HTML.
-    INSTRUCTIONS: "{instructions}"
-    HTML CONTENT: {current_html}
-    
-    RULES: 
-    1. Keep ALL the inline style="..." attributes exactly as they are. Do not strip them.
-    2. Output ONLY HTML.
-    """
+    core_text = current_html.replace(BLOG_WRAPPER_START, "").replace(BLOG_WRAPPER_END, "")
+    prompt = f"Edit this HTML based on: '{instructions}'. Content: {core_text}. Output ONLY valid HTML with styles."
     try:
         response = client.chat.completions.create(
             model="gpt-4o", 
             messages=[{"role": "user", "content": prompt}]
         )
-        return clean_html_output(response.choices[0].message.content)
+        return clean_and_wrap_html(response.choices[0].message.content)
     except Exception as e: return current_html
 
 def generate_seo_meta(content):
@@ -98,16 +94,13 @@ def generate_seo_meta(content):
 
 # --- UI ---
 st.set_page_config(page_title="Universal Auto-Blogger", page_icon="✍️", layout="wide")
-st.title("✍️ Universal Auto-Blogger (Inline Style Fix)")
+st.title("✍️ Universal Auto-Blogger (Visual Fix)")
 
 with st.sidebar:
     st.header("1. Settings")
     persona = st.text_area("Persona", height=100, 
         value="Lead Revenue Architect at Sharp Human. Expert in AI and RevOps.")
-    tone = st.select_slider("Tone", 
-        options=["Corporate", "Direct", "Educational", "Storyteller", "Witty"], 
-        value="Educational")
-        
+    tone = st.select_slider("Tone", options=["Corporate", "Direct", "Educational"], value="Educational")
     if st.button("Start Over"):
         st.session_state.blog_content = ""
         st.rerun()
@@ -130,7 +123,7 @@ else:
     
     with col1:
         st.subheader("💬 Editor")
-        user_feedback = st.chat_input("Ex: 'Make the intro punchier'")
+        user_feedback = st.chat_input("Make edits here...")
         if user_feedback:
             with st.spinner("Editing..."):
                 st.session_state.blog_content = refine_blog_post(st.session_state.blog_content, user_feedback)
@@ -139,10 +132,13 @@ else:
         st.code(st.session_state.seo_data)
 
     with col2:
-        st.subheader("📖 Preview")
+        # VISUAL PREVIEW: This renders the HTML so you can see the design
+        st.subheader("👁️ Visual Preview")
         st.markdown(st.session_state.blog_content, unsafe_allow_html=True)
         
         st.divider()
-        st.subheader("📋 HTML Code")
-        st.info("Copy this EXACTLY into the GHL Code Editor (< > button).")
+        
+        # RAW CODE: This is what you copy
+        st.subheader("📋 Source Code (Copy This)")
+        st.info("Paste this into the < > Source Code view in GHL.")
         st.code(st.session_state.blog_content, language="html")
