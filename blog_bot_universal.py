@@ -12,7 +12,6 @@ if "seo_data" not in st.session_state:
     st.session_state.seo_data = ""
 
 # --- DESIGNER STYLING (The "Human" Look) ---
-# This CSS makes it look like a high-end Medium article or Magazine
 BLOG_WRAPPER_START = """
 <div style="
     background-color: #ffffff; 
@@ -49,7 +48,7 @@ def generate_blog_post(topic, persona, key_points, tone):
     
     prompt = f"""
     IDENTITY: {persona}
-    TONE: {tone} (Write like a human expert, not a robot. Use contractions, vary sentence length.)
+    TONE: {tone} (Write like a human expert. Use contractions, vary sentence length.)
     TOPIC: "{topic}"
     DETAILS: {key_points}
     
@@ -106,7 +105,12 @@ with st.sidebar:
     st.header("1. Settings")
     persona = st.text_area("Persona", height=100, 
         value="Lead Revenue Architect at Sharp Human. Expert in AI and RevOps.")
-    tone = st.select_slider("Tone", options=["Corporate", "Direct", "Storyteller", "Witty"], value="Storyteller")
+    
+    # ADDED "Educational" BACK IN HERE
+    tone = st.select_slider("Tone", 
+        options=["Corporate", "Direct", "Educational", "Storyteller", "Witty"], 
+        value="Educational")
+        
     if st.button("Start Over"):
         st.session_state.blog_content = ""
         st.rerun()
