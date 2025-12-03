@@ -11,27 +11,24 @@ if "blog_content" not in st.session_state:
 if "seo_data" not in st.session_state:
     st.session_state.seo_data = ""
 
-# --- 🎨 THE "MODERN SAAS" STYLING ENGINE ---
-# This CSS forces the blog to look like a high-end tech site (Stripe/Notion style).
-# We use !important to override GoHighLevel defaults.
-
+# --- 🎨 MODERN STYLING (The "Stripe" Look) ---
+# We treat the blog post like a "Card" floating on the page
 BLOG_WRAPPER_START = """
 <div style="
     max-width: 720px;
     margin: 0 auto;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
-    color: #334155; /* Slate 700 */
-    font-size: 19px;
-    line-height: 1.8;
-    background-color: #ffffff;
-    padding: 40px;
-    border-radius: 12px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    color: #334155; 
+    font-size: 19px; 
+    line-height: 1.8; 
+    background-color: #ffffff; 
+    padding: 40px; 
+    border-radius: 12px; 
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
 ">
 """
 BLOG_WRAPPER_END = "</div>"
 
-# The "Notion Style" Callout Box
 TAKEAWAY_BOX = """
 <div style="
     background-color: #f8fafc; 
@@ -43,31 +40,42 @@ TAKEAWAY_BOX = """
 ">
 """
 
-# --- HELPER: CLEANER ---
+# --- HELPER: AGGRESSIVE CLEANER ---
 def clean_and_wrap_html(text):
-    text = text.replace("```html", "").replace("```", "").strip()
-    text = text.replace(BLOG_WRAPPER_START.strip(), "").replace(BLOG_WRAPPER_END.strip(), "")
+    """
+    1. Removes Markdown backticks (The cause of your issue).
+    2. Wraps in the Modern CSS container.
+    """
+    # Strip the "Poison" characters
+    text = text.replace("```html", "")
+    text = text.replace("```", "")
+    text = text.strip()
+    
+    # Remove duplicates if AI added them
+    text = text.replace(BLOG_WRAPPER_START.strip(), "")
+    text = text.replace(BLOG_WRAPPER_END.strip(), "")
+    
+    # Return wrapped
     return f"{BLOG_WRAPPER_START}\n{text}\n{BLOG_WRAPPER_END}"
 
 # --- AI WRITER ---
 def generate_blog_post(topic, persona, key_points, tone):
-    
     prompt = f"""
     IDENTITY: {persona}
-    TONE: {tone} (Write like a modern tech thought leader. Crisp, authoritative, human.)
+    TONE: {tone}
     TOPIC: "{topic}"
     DETAILS: {key_points}
     
-    TASK: Write the HTML content.
+    TASK: Write the inner HTML content.
     
-    STYLING RULES (Strictly enforce these inline styles):
-    1. Start with the Key Takeaways box using EXACTLY this string: {TAKEAWAY_BOX}
-    2. Inside that box, use <h3 style="margin-top: 0; color: #0f172a; font-weight: 700; font-size: 20px;">Key Takeaways</h3> and <ul style="color: #334155; margin-bottom: 0; padding-left: 20px;">.
-    3. HEADERS: Use <h2 style="color: #0f172a; font-weight: 700; font-size: 28px; margin-top: 50px; margin-bottom: 20px; letter-spacing: -0.02em;"> for main sections.
+    FORMATTING RULES:
+    1. Start with Key Takeaways: {TAKEAWAY_BOX}
+    2. Inside box: <h3 style="margin-top: 0; color: #0f172a;">Key Takeaways</h3> and <ul style="color: #334155; margin-bottom: 0; padding-left: 20px;">.
+    3. HEADERS: Use <h2 style="color: #0f172a; font-weight: 700; font-size: 28px; margin-top: 50px; margin-bottom: 20px; letter-spacing: -0.02em;">.
     4. PARAGRAPHS: Use <p style="margin-bottom: 24px;">.
-    5. EMPHASIS: Use <strong style="color: #0f172a; font-weight: 600;"> for bold text.
-    6. LINKS: Use <a href="#" style="color: #2563eb; text-decoration: underline; text-decoration-thickness: 2px; font-weight: 500;"> for links.
-    7. NO <html>/<body> tags.
+    5. EMPHASIS: Use <strong style="color: #0f172a; font-weight: 600;">.
+    6. LINKS: Use <a href="#" style="color: #2563eb; text-decoration: underline; font-weight: 500;">.
+    7. NO <html> tags. NO Markdown backticks.
     """
     try:
         response = client.chat.completions.create(
@@ -75,17 +83,17 @@ def generate_blog_post(topic, persona, key_points, tone):
             messages=[{"role": "user", "content": prompt}]
         )
         return clean_and_wrap_html(response.choices[0].message.content)
-        
     except Exception as e: return f"Error: {e}"
 
 def refine_blog_post(current_html, instructions):
+    # Unwrap for editing
     core_text = current_html.replace(BLOG_WRAPPER_START, "").replace(BLOG_WRAPPER_END, "")
     
     prompt = f"""
-    Expert Editor Task: Edit this HTML.
+    Expert Editor Task: Edit this HTML based on instructions.
     INSTRUCTIONS: "{instructions}"
     HTML CONTENT: {core_text}
-    RULES: Keep the inline CSS styles exactly as they are. Output ONLY HTML.
+    RULES: Keep CSS styles. Output ONLY HTML. No markdown.
     """
     try:
         response = client.chat.completions.create(
@@ -105,17 +113,14 @@ def generate_seo_meta(content):
     except: return ""
 
 # --- UI ---
-st.set_page_config(page_title="Universal Auto-Blogger", page_icon="✍️", layout="wide")
-st.title("✍️ Universal Auto-Blogger (Modern UI)")
+st.set_page_config(page_title="Modern Auto-Blogger", page_icon="✍️", layout="wide")
+st.title("✍️ Universal Auto-Blogger (Clean Code Fix)")
 
 with st.sidebar:
     st.header("1. Settings")
     persona = st.text_area("Persona", height=100, 
         value="Lead Revenue Architect at Sharp Human. Expert in AI and RevOps.")
-    tone = st.select_slider("Tone", 
-        options=["Corporate", "Direct", "Educational", "Storyteller", "Witty"], 
-        value="Educational")
-        
+    tone = st.select_slider("Tone", options=["Corporate", "Direct", "Educational", "Storyteller"], value="Educational")
     if st.button("Start Over"):
         st.session_state.blog_content = ""
         st.rerun()
@@ -148,9 +153,11 @@ else:
 
     with col2:
         st.subheader("📖 Preview")
+        # Renders the HTML visually
         st.markdown(st.session_state.blog_content, unsafe_allow_html=True)
         
         st.divider()
-        st.subheader("📋 HTML Code")
-        st.info("Copy this EXACTLY into the GHL Code Editor (< > button).")
+        st.subheader("📋 Clean HTML Code")
+        st.info("Click the Copy icon. Then paste into GHL < > Editor.")
+        # This box now GUARANTEES no backticks
         st.code(st.session_state.blog_content, language="html")
