@@ -11,24 +11,36 @@ if "blog_content" not in st.session_state:
 if "seo_data" not in st.session_state:
     st.session_state.seo_data = ""
 
+# --- STYLING CONSTANTS (The Safety Net) ---
+# We force this wrapper onto EVERY blog post, no matter what the AI does.
+# This ensures it is always White Background with Dark Text.
+BLOG_WRAPPER_START = """
+<div style="background-color: #ffffff; color: #333333; font-family: Arial, sans-serif; font-size: 16px; line-height: 1.6; padding: 20px; border-radius: 8px;">
+"""
+BLOG_WRAPPER_END = "</div>"
+
 # --- HELPER: CLEANER ---
-def clean_html_output(text):
+def clean_and_wrap_html(text):
+    """
+    1. Strips markdown backticks.
+    2. Removes any existing wrappers (to prevent duplicates).
+    3. Re-applies the master White Background wrapper.
+    """
+    # Strip Markdown
     text = text.replace("```html", "").replace("```", "").strip()
-    return text
+    
+    # Strip previous wrappers if they exist (cleanup)
+    text = text.replace(BLOG_WRAPPER_START.strip(), "")
+    text = text.replace(BLOG_WRAPPER_END.strip(), "")
+    
+    # Return wrapped content
+    return f"{BLOG_WRAPPER_START}\n{text}\n{BLOG_WRAPPER_END}"
 
 # --- AI WRITER ---
 def generate_blog_post(topic, persona, key_points, tone):
     
-    # MASTER STYLE WRAPPER
-    # This forces the whole blog to have a White Background and Dark Text
-    # No more invisible text issues!
-    wrapper_start = """
-    <div style="background-color: #ffffff; color: #333333; font-family: sans-serif; padding: 20px; border-radius: 8px; line-height: 1.6;">
-    """
-    wrapper_end = "</div>"
-    
-    # Key Takeaways Box Style (Clean Grey)
-    box_style = 'border: 1px solid #e0e0e0; background-color: #f9f9f9; padding: 20px; border-radius: 5px; margin-bottom: 30px;'
+    # Specific style for the Takeaways box to ensure visibility
+    takeaway_box_style = 'background-color: #f0f4f8; border-left: 5px solid #007bff; padding: 15px; margin-bottom: 25px; color: #000000;'
     
     prompt = f"""
     IDENTITY: {persona}
@@ -36,14 +48,14 @@ def generate_blog_post(topic, persona, key_points, tone):
     TOPIC: "{topic}"
     DETAILS: {key_points}
     
-    TASK: Write a blog post in HTML.
+    TASK: Write the inner HTML content for a blog post.
     
     FORMATTING RULES:
-    1. Start with the Key Takeaways box using EXACTLY this div: <div style="{box_style}">
-    2. Inside that box, use an <h3> tag for the title "Key Takeaways".
-    3. Use <h2> for all main section headers.
-    4. Use <strong> for emphasis.
-    5. DO NOT include <html> or <body> tags.
+    1. Start immediately with a Key Takeaways box using this div: <div style="{takeaway_box_style}">
+    2. Inside that box, use <h3>Key Takeaways</h3> and <ul>. Ensure text is Black.
+    3. After the box, use <h2> for main headers.
+    4. Use <p> for paragraphs.
+    5. DO NOT use <html>, <head>, <body>, or main wrapper divs.
     6. NO markdown backticks.
     """
     try:
@@ -51,37 +63,36 @@ def generate_blog_post(topic, persona, key_points, tone):
             model="gpt-4o", 
             messages=[{"role": "user", "content": prompt}]
         )
-        # Wrap the AI content in our Safe Color Container
-        raw_html = clean_html_output(response.choices[0].message.content)
-        return f"{wrapper_start}\n{raw_html}\n{wrapper_end}"
+        # We wrap it in Python to guarantee the style sticks
+        return clean_and_wrap_html(response.choices[0].message.content)
         
     except Exception as e: return f"Error: {e}"
 
-def refine_blog_post(current_content, instructions):
-    # We strip the wrapper before editing, then re-add it later
-    # This prevents the AI from messing up the outer container
-    core_content = current_content.replace('<div style="background-color: #ffffff; color: #333333; font-family: sans-serif; padding: 20px; border-radius: 8px; line-height: 1.6;">', '').replace('</div>', '')
+def refine_blog_post(current_html, instructions):
+    # Strip wrapper before sending to AI (so it only edits text)
+    core_text = current_html.replace(BLOG_WRAPPER_START, "").replace(BLOG_WRAPPER_END, "")
     
     prompt = f"""
     You are an Expert Editor. Edit this HTML content based on instructions.
-    USER INSTRUCTIONS: "{instructions}"
-    CURRENT HTML: {core_content}
     
-    RULES: Output ONLY valid HTML. Keep formatting tags (h2, ul). No markdown.
+    USER INSTRUCTIONS: "{instructions}"
+    CURRENT HTML CONTENT:
+    {core_text}
+    
+    RULES: 
+    1. Output ONLY valid HTML. 
+    2. Keep the formatting tags (h2, ul, div style=...). 
+    3. Do NOT add markdown backticks.
     """
     try:
         response = client.chat.completions.create(
-            model="gpt-4o", messages=[{"role": "user", "content": prompt}]
+            model="gpt-4o", 
+            messages=[{"role": "user", "content": prompt}]
         )
-        new_core = clean_html_output(response.choices[0].message.content)
+        # Re-wrap the result
+        return clean_and_wrap_html(response.choices[0].message.content)
         
-        # Re-wrap in the Safe Color Container
-        wrapper_start = """
-        <div style="background-color: #ffffff; color: #333333; font-family: sans-serif; padding: 20px; border-radius: 8px; line-height: 1.6;">
-        """
-        return f"{wrapper_start}\n{new_core}\n</div>"
-        
-    except Exception as e: return current_content
+    except Exception as e: return current_html
 
 def generate_seo_meta(content):
     prompt = f"Generate Meta Description (160 chars), Slug, and 5 Keywords for this HTML:\n{content[:3000]}"
@@ -94,7 +105,7 @@ def generate_seo_meta(content):
 
 # --- UI ---
 st.set_page_config(page_title="Universal Auto-Blogger", page_icon="✍️", layout="wide")
-st.title("✍️ Universal Auto-Blogger")
+st.title("✍️ Universal Auto-Blogger (Safe Mode)")
 
 # SIDEBAR
 with st.sidebar:
@@ -142,9 +153,12 @@ else:
 
     with col2:
         st.subheader("📖 Live Preview")
-        # Render HTML (It will look like a white document now)
+        # This preview will now show the white box correctly
         st.markdown(st.session_state.blog_content, unsafe_allow_html=True)
         
         st.divider()
-        st.subheader("📋 HTML Code (For GHL)")
-        st.text_area("Copy this:", value=st.session_state.blog_content, height=300)
+        st.subheader("📋 Final Code")
+        st.info("Click the copy button in the top-right of the box below.")
+        
+        # Using st.code provides a built-in one-click COPY button
+        st.code(st.session_state.blog_content, language="html")
